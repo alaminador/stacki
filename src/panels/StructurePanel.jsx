@@ -15,6 +15,7 @@ import {
   RepeatIcon,
   ExpandVerticalIcon,
   CollapseVerticalIcon,
+  PlusIcon,
   elementIcon,
   CustomElementIcon,
 } from '../ui/Icons.jsx';
@@ -26,6 +27,7 @@ import {
 //    directly on a node row (append as child)
 //  - reordering/reparenting existing nodes (avb/node) the same way
 //  - collapse/expand for nodes with children
+//  - inserting at an exact spot via the "+" on each row and each gap
 export default function StructurePanel({
   pageState,
   layouts,
@@ -42,6 +44,7 @@ export default function StructurePanel({
   onCopyNode,
   onDuplicateNode,
   onPasteNode,
+  onRequestInsert,
   hasClipboard,
   onRawChange,
 }) {
@@ -51,6 +54,9 @@ export default function StructurePanel({
   // their default (text-only children start collapsed).
   const [toggled, setToggled] = useState(() => new Map());
   const [ctxMenu, setCtxMenu] = useState(null); // {x, y, nodeId}
+  // Row "+" menu: {x, y, node, parentId, index} — the node the "+" belongs to
+  // plus where it sits, so "before"/"after" have somewhere to land.
+  const [insertMenu, setInsertMenu] = useState(null);
   // Expand-all / collapse-all toggle in the header, with a delayed tooltip.
   const [allExpanded, setAllExpanded] = useState(false);
   const [headerTip, setHeaderTip] = useState(null); // {left, top}
@@ -219,6 +225,19 @@ export default function StructurePanel({
   const toggleCollapse = (node) =>
     setToggled((prev) => new Map(prev).set(node.id, !isCollapsed(node)));
 
+  // Opens the insert palette aimed at an exact spot instead of at whatever
+  // happens to be selected. `parent` is the node that will hold the new one
+  // (null = page root); the palette uses its tag to drop tags that would be
+  // invalid markup inside it.
+  const requestInsert = (target, parent, label) => {
+    if (!onRequestInsert) return;
+    onRequestInsert({
+      target,
+      parentTag: parent && parent.kind === 'element' ? parent.name : null,
+      label,
+    });
+  };
+
   // Alternates between expanding and collapsing every node with children.
   const toggleAll = () => {
     const collapsed = allExpanded;
@@ -293,6 +312,13 @@ export default function StructurePanel({
           onSelect={onSelect}
           onRemoveNode={onRemoveNode}
           toggleCollapse={toggleCollapse}
+          requestInsert={onRequestInsert ? requestInsert : null}
+          openInsertMenu={
+            onRequestInsert
+              ? (x, y, node, parentId, index, canInside) =>
+                  setInsertMenu({ x, y, node, parentId, index, canInside })
+              : null
+          }
           openContextMenu={(x, y, nodeId) => {
             onSelect(nodeId);
             setCtxMenu({ x, y, nodeId });
@@ -311,9 +337,43 @@ export default function StructurePanel({
             onDrop={(e) => performDrop(e, { parentId: null, index: 0 })}
           >
             Drag components here
+            {onRequestInsert && (
+              <button
+                className="drop-zone-add"
+                onClick={() => requestInsert({ parentId: null, index: 0 }, null, 'at the page root')}
+              >
+                <PlusIcon size={12} /> Add an element
+              </button>
+            )}
           </div>
         )}
       </div>
+
+      {insertMenu && (
+        <InsertMenu
+          pos={insertMenu}
+          canInside={insertMenu.canInside}
+          onClose={() => setInsertMenu(null)}
+          onPick={(where) => {
+            const { node, parentId, index } = insertMenu;
+            setInsertMenu(null);
+            const label = node.id === 'layout' ? currentLayoutName || node.name : describeNode(node).label;
+            if (where === 'inside') {
+              requestInsert(
+                { parentId: node.id, index: Array.isArray(node.children) ? node.children.length : 0 },
+                node,
+                `inside ${label}`
+              );
+            } else {
+              requestInsert(
+                { parentId, index: where === 'before' ? index : index + 1 },
+                parentId ? findNodeIn(model.nodes, parentId) : null,
+                `${where} ${label}`
+              );
+            }
+          }}
+        />
+      )}
 
       {ctxMenu && (
         <ContextMenu
@@ -333,8 +393,8 @@ export default function StructurePanel({
   );
 }
 
-// Right-click menu for navigator nodes.
-function ContextMenu({ pos, canPaste, onClose, onAction }) {
+// Dismiss a floating menu on outside click, Escape, scroll, or resize.
+function useDismiss(onClose) {
   const ref = useRef(null);
 
   useEffect(() => {
@@ -359,6 +419,46 @@ function ContextMenu({ pos, canPaste, onClose, onAction }) {
       window.removeEventListener('resize', onClose);
     };
   }, [onClose]);
+
+  return ref;
+}
+
+// The "+" menu on a navigator row: where the new node goes relative to it.
+function InsertMenu({ pos, canInside, onClose, onPick }) {
+  const ref = useDismiss(onClose);
+
+  const width = 190;
+  const height = 3 * 26 + 18;
+  const left = Math.min(pos.x, window.innerWidth - width - 8);
+  const top = Math.min(pos.y, window.innerHeight - height - 8);
+
+  const Item = ({ where, label, hint, disabled }) => (
+    <div
+      className={`ctx-menu-item ${disabled ? 'disabled' : ''}`}
+      onClick={() => !disabled && onPick(where)}
+    >
+      <span>{label}</span>
+      {hint && <span className="ctx-shortcut">{hint}</span>}
+    </div>
+  );
+
+  return (
+    <div ref={ref} className="ctx-menu" style={{ left, top, width }}>
+      <Item
+        where="inside"
+        label="Insert inside"
+        hint="last child"
+        disabled={!canInside}
+      />
+      <Item where="before" label="Insert before" />
+      <Item where="after" label="Insert after" />
+    </div>
+  );
+}
+
+// Right-click menu for navigator nodes.
+function ContextMenu({ pos, canPaste, onClose, onAction }) {
+  const ref = useDismiss(onClose);
 
   // Keep the menu on-screen.
   const width = 200;
@@ -423,10 +523,21 @@ function acceptsDrag(parent) {
   return canContainTag(parent.name, d.tag);
 }
 
-function Gap({ parentId, index, depth, dropTarget, setDropTarget, isDndPayload, performDrop, nodeById }) {
+function Gap({
+  parentId,
+  index,
+  depth,
+  dropTarget,
+  setDropTarget,
+  isDndPayload,
+  performDrop,
+  nodeById,
+  requestInsert,
+}) {
   const active =
     dropTarget && dropTarget.parentId === parentId && dropTarget.index === index && !dropTarget.intoId;
-  const ok = acceptsDrag(parentId ? nodeById(parentId) : null);
+  const parent = parentId ? nodeById(parentId) : null;
+  const ok = acceptsDrag(parent);
   return (
     <div
       className="nav-gap"
@@ -441,6 +552,24 @@ function Gap({ parentId, index, depth, dropTarget, setDropTarget, isDndPayload, 
       onDrop={(e) => ok && performDrop(e, { parentId, index })}
     >
       {active && <div className="drop-indicator" />}
+      {/* Hidden until the gap is hovered, and never while a drag is in
+          flight — the drop indicator owns the gap then. */}
+      {!active && requestInsert && (
+        <button
+          className="nav-gap-plus"
+          title="Insert here"
+          onClick={(e) => {
+            e.stopPropagation();
+            requestInsert(
+              { parentId, index },
+              parent,
+              parent ? `inside ${describeNode(parent).label}` : 'at the page root'
+            );
+          }}
+        >
+          <PlusIcon size={10} />
+        </button>
+      )}
     </div>
   );
 }
@@ -459,6 +588,7 @@ function TreeNode({ node, parentId, index, depth, ...ctx }) {
     onOpenComponent,
     toggleCollapse,
     openContextMenu,
+    openInsertMenu,
   } = ctx;
 
   const isLayoutNode = node.id === 'layout';
@@ -559,6 +689,19 @@ function TreeNode({ node, parentId, index, depth, ...ctx }) {
         <span className="label" style={node.kind === 'text' ? { fontWeight: 400, fontStyle: 'italic' } : {}}>
           {label}
         </span>
+        {openInsertMenu && (
+          <button
+            className="node-plus"
+            title="Insert…"
+            onClick={(e) => {
+              e.stopPropagation();
+              const r = e.currentTarget.getBoundingClientRect();
+              openInsertMenu(r.right, r.bottom + 4, node, parentId, index, canHostChildren);
+            }}
+          >
+            <PlusIcon size={11} />
+          </button>
+        )}
       </div>
 
       {showChildren && !nodeCollapsed && (

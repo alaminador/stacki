@@ -1056,12 +1056,31 @@ export default function App() {
   // ----------------------------------------------------------------
 
   const [insertOpen, setInsertOpen] = useState(false);
+  // Set when the palette is opened from a navigator "+", which names an exact
+  // spot: {target: {parentId, index}, parentTag, label}. Null means the
+  // keyboard/menu path, which derives the spot from the selection instead.
+  const [insertAt, setInsertAt] = useState(null);
+  const insertAtRef = useRef(null);
+  insertAtRef.current = insertAt;
+
+  const closeInsert = useCallback(() => {
+    setInsertOpen(false);
+    setInsertAt(null);
+  }, []);
+
+  // Navigator "+": aim the palette at a specific parent and index.
+  const openInsertAt = useCallback((info) => {
+    if (!pageStateRef.current.pageState?.editable) return;
+    setInsertAt(info);
+    setInsertOpen(true);
+  }, []);
 
   // Open requests from the app menu (⌘E accelerator) and from canvas
   // iframes (which forward ⌘F/⌘E when they hold keyboard focus).
   useEffect(() => {
     const openIfEditable = () => {
       if (pageStateRef.current.pageState?.editable && !inPreviewRef.current) {
+        setInsertAt(null);
         setInsertOpen(true);
       }
     };
@@ -1160,10 +1179,13 @@ export default function App() {
 
   const insertItem = useCallback(
     (item) => {
-      setInsertOpen(false);
+      const aimed = insertAtRef.current;
+      closeInsert();
       const state = pageStateRef.current.pageState;
       if (!state?.editable) return;
-      const target = insertTargetFor(state.model, selectedIdRef.current, item);
+      // A navigator "+" already said where this goes; only the keyboard path
+      // has to work it out from the selection.
+      const target = aimed ? aimed.target : insertTargetFor(state.model, selectedIdRef.current, item);
 
       if (item.type === 'component') {
         addComponent(item.name, target);
@@ -1206,7 +1228,7 @@ export default function App() {
       }, true);
       setSelectedId(id);
     },
-    [insertTargetFor, addComponent, mutateModel]
+    [insertTargetFor, addComponent, mutateModel, closeInsert]
   );
 
   // True while the CMS covers the canvas: the page-editing shortcuts below
@@ -1239,6 +1261,7 @@ export default function App() {
         const el = e.target;
         if (el instanceof HTMLElement && el.closest('.cm-editor')) return;
         e.preventDefault();
+        setInsertAt(null);
         setInsertOpen(true);
         return;
       }
@@ -2208,6 +2231,7 @@ export default function App() {
                 onCopyNode={copyNode}
                 onDuplicateNode={duplicateNode}
                 onPasteNode={pasteNode}
+                onRequestInsert={openInsertAt}
                 hasClipboard={() => !!nodeClipboardRef.current}
                 onRawChange={setRawSource}
               />
@@ -2422,7 +2446,9 @@ export default function App() {
         <InsertSearch
           components={insertables}
           onInsert={insertItem}
-          onClose={() => setInsertOpen(false)}
+          onClose={closeInsert}
+          targetLabel={insertAt?.label}
+          parentTag={insertAt?.parentTag}
         />
       )}
 

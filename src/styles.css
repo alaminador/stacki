@@ -456,6 +456,16 @@ textarea { font-family: inherit; font-size: 12px; line-height: 1.5; resize: none
   box-shadow: 0 32px 80px rgba(0, 0, 0, 0.6);
   overflow: hidden;
 }
+/* Names the spot a navigator "+" aimed the palette at. */
+.insert-target {
+  padding: 12px 18px 0;
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+.insert-target strong {
+  color: var(--text);
+  font-weight: 500;
+}
 .insert-search-row {
   display: flex;
   align-items: center;
@@ -1282,6 +1292,25 @@ body > .embed-editor_bg-modal-backdrop > .embed-editor_grid-modal {
   white-space: nowrap;
   font-weight: 500;
 }
+/* Row "+": opens the inside/before/after menu. Always occupies its slot so
+   the label doesn't reflow on hover — only its opacity changes. */
+.structure-node .node-plus {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-dim);
+  opacity: 0;
+  transition: opacity 0.08s;
+}
+.structure-node:hover .node-plus,
+.structure-node.selected .node-plus { opacity: 1; }
+.structure-node .node-plus:hover { background: var(--accent); color: white; opacity: 1; }
 .structure-node .prop-preview {
   font-size: 10.5px;
   color: var(--text-faint);
@@ -1326,8 +1355,49 @@ body > .embed-editor_bg-modal-backdrop > .embed-editor_grid-modal {
    gaps of every ancestor level are adjacent in the DOM — collapse all but
    the first so they don't stack into a large blank strip (each stays a
    distinct drop target for its own nesting level). */
-.nav-gap { height: 7px; }
+.nav-gap { height: 7px; position: relative; }
 .nav-gap + .nav-gap { height: 2px; }
+
+/* Insert-here "+" centred in the gap. Absolutely positioned so revealing it
+   costs no reflow — the rows either side must not jump as the pointer
+   travels down the tree. It overflows the 7px strip, which is fine: hovering
+   a child keeps the gap itself in :hover, so it stays reachable. */
+.nav-gap-plus {
+  position: absolute;
+  left: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--accent);
+  color: white;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.08s;
+  z-index: 2;
+}
+.nav-gap:hover .nav-gap-plus { opacity: 1; pointer-events: auto; }
+.nav-gap-plus:hover { background: #24a8ff; }
+/* A guide line so the "+" reads as "between these two rows". */
+.nav-gap:hover .nav-gap-plus::after {
+  content: '';
+  position: absolute;
+  left: 15px;
+  width: 100vw;
+  height: 1px;
+  background: var(--accent);
+  opacity: 0.4;
+  pointer-events: none;
+}
+/* Stacked gaps collapse to 2px — too thin to aim at, and the two buttons
+   would sit on top of each other. Those positions stay reachable through a
+   row's "+" menu ("Insert after"). */
+.nav-gap + .nav-gap .nav-gap-plus { display: none; }
 
 .drop-indicator {
   height: 2px;
@@ -1346,6 +1416,18 @@ body > .embed-editor_bg-modal-backdrop > .embed-editor_grid-modal {
   font-size: 11.5px;
 }
 .drop-zone-empty.over { border-color: var(--accent); background: var(--accent-soft); color: var(--text); }
+.drop-zone-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin: 10px auto 0;
+  padding: 5px 10px;
+  border-radius: 6px;
+  background: var(--bg-hover);
+  color: var(--text);
+  font-size: 11.5px;
+}
+.drop-zone-add:hover { background: var(--accent); color: white; }
 
 /* ------------------------------------------------------------------ */
 /* Custom dropdown                                                     */

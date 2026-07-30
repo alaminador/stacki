@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { HTML_TAGS } from '../elementSchemas.js';
+import { HTML_TAGS, canContainTag } from '../elementSchemas.js';
 import {
   elementIcon,
   ElementComponentIcon,
@@ -20,7 +20,12 @@ const TABS = [
 
 // Quick-insert palette (⌘F / ⌘E): fuzzy-searches components, HTML tags, and
 // special node types; Enter or click inserts at the current selection.
-export default function InsertSearch({ components, onInsert, onClose }) {
+//
+// Opened from a navigator "+" it also carries where the node will land:
+// `targetLabel` names the spot, and `parentTag` is the element that will hold
+// it — so tags that would be invalid markup there are left out of the list
+// rather than silently rehomed on insert.
+export default function InsertSearch({ components, onInsert, onClose, targetLabel, parentTag }) {
   const [query, setQuery] = useState('');
   const [tab, setTab] = useState('all');
   const [highlight, setHighlight] = useState(0);
@@ -42,14 +47,16 @@ export default function InsertSearch({ components, onInsert, onClose }) {
         <ElementComponentIcon size={15} style={{ color: '#79e09c' }} />
       ),
     }));
-    const tags = HTML_TAGS.map((tag) => ({
-      type: 'element',
-      tag,
-      label: `<${tag}>`,
-      search: tag,
-      cat: 'elements',
-      icon: elementIcon(tag, 14),
-    }));
+    const tags = HTML_TAGS.filter((tag) => !parentTag || canContainTag(parentTag, tag)).map(
+      (tag) => ({
+        type: 'element',
+        tag,
+        label: `<${tag}>`,
+        search: tag,
+        cat: 'elements',
+        icon: elementIcon(tag, 14),
+      })
+    );
     const other = [
       { type: 'map', label: 'Loop', sub: 'items.map', cat: 'other', icon: <RepeatIcon size={14} style={{ color: '#c4afff' }} /> },
       { type: 'text', label: 'Text', cat: 'other', icon: <TextIcon size={14} /> },
@@ -59,7 +66,7 @@ export default function InsertSearch({ components, onInsert, onClose }) {
       { type: 'script', label: 'Script Block', sub: '<script>', cat: 'other', icon: <CodeIcon size={14} /> },
     ];
     return [...comps, ...tags, ...other];
-  }, [components]);
+  }, [components, parentTag]);
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -112,6 +119,11 @@ export default function InsertSearch({ components, onInsert, onClose }) {
   return (
     <div className="insert-overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="insert-palette" onKeyDown={onKeyDown}>
+        {targetLabel && (
+          <div className="insert-target">
+            Inserting <strong>{targetLabel}</strong>
+          </div>
+        )}
         <div className="insert-search-row">
           <SearchIcon size={14} />
           <input
