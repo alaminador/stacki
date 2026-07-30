@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  AddPanelIcon,
   PagePanelIcon,
   NavigatorIcon,
   ComponentFillIcon,
@@ -8,6 +9,7 @@ import {
 } from './Icons.jsx';
 
 const TABS = [
+  { id: 'add', title: 'Add', shortcut: 'A', Icon: AddPanelIcon },
   { id: 'pages', title: 'Pages', shortcut: 'P', Icon: PagePanelIcon },
   { id: 'navigator', title: 'Navigator', shortcut: 'Z', Icon: NavigatorIcon },
   { id: 'components', title: 'Components', shortcut: '⇧A', Icon: ComponentFillIcon },
@@ -39,7 +41,7 @@ export default function LeftRail({ active, onSelect }) {
 
   useEffect(() => () => clearTimeout(timerRef.current), []);
 
-  // P / Z / ⇧A / J / ⌥C toggle the panels (ignored while typing in a field).
+  // A / P / Z / ⇧A / J / ⌥C toggle the panels (ignored while typing in a field).
   useEffect(() => {
     const onKey = (e) => {
       if (e.metaKey || e.ctrlKey) return;
@@ -60,7 +62,8 @@ export default function LeftRail({ active, onSelect }) {
       }
       const k = e.key.toLowerCase();
       let id = null;
-      if (k === 'p' && !e.shiftKey) id = 'pages';
+      if (k === 'a' && !e.shiftKey) id = 'add';
+      else if (k === 'p' && !e.shiftKey) id = 'pages';
       else if (k === 'z' && !e.shiftKey) id = 'navigator';
       else if (k === 'a' && e.shiftKey) id = 'components';
       else if (k === 'j' && !e.shiftKey) id = 'assets';

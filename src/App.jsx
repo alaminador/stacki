@@ -3,6 +3,7 @@ import WelcomeScreen from './panels/WelcomeScreen.jsx';
 import PagesPanel from './panels/PagesPanel.jsx';
 import PalettePanel from './panels/PalettePanel.jsx';
 import StructurePanel from './panels/StructurePanel.jsx';
+import AddPanel from './panels/AddPanel.jsx';
 import PropsPanel from './panels/PropsPanel.jsx';
 import StylePanel from './panels/StylePanel.jsx';
 import PreviewPane from './panels/PreviewPane.jsx';
@@ -1209,43 +1210,30 @@ export default function App() {
         return;
       }
 
-      const id = newId();
-      let node = null;
-      if (item.type === 'element') {
-        const placeholder = DEFAULT_TEXT[item.tag];
-        node = {
-          id,
-          kind: 'element',
-          name: item.tag,
-          props: {},
-          children: VOID_ELEMENTS.has(item.tag)
-            ? null
-            : placeholder
-              ? [{ id: newId(), kind: 'text', value: placeholder }]
-              : [],
-        };
-      } else if (item.type === 'map') {
-        // No source until one is picked in the props panel. An empty literal
-        // renders nothing; a placeholder name would throw "x is not defined"
-        // and take the preview down the moment the loop lands on the page.
-        node = { id, kind: 'map', head: '[].map((item) => (', children: [] };
-      } else if (item.type === 'comment') {
-        node = { id, kind: 'comment', value: ' Comment ' };
-      } else if (item.type === 'text') {
-        node = { id, kind: 'text', value: 'Text' };
-      } else if (item.type === 'expr') {
-        node = { id, kind: 'expr', value: '{/* code */}' };
-      } else if (item.type === 'style' || item.type === 'script') {
-        node = { id, kind: 'raw', name: item.type, props: {}, inner: '' };
-      }
+      const node = buildInsertNode(item);
       if (!node) return;
       mutateModel((model) => {
         insertIntoModel(model, node, target);
         return model;
       }, true);
-      setSelectedId(id);
+      setSelectedId(node.id);
     },
     [insertTargetFor, addComponent, mutateModel, closeInsert]
+  );
+
+  // Drag from the Add panel onto a navigator row/gap: same node, but the drop
+  // named the target, so it skips the selection-derived one insertItem uses.
+  const dropElement = useCallback(
+    (item, target) => {
+      const node = buildInsertNode(item);
+      if (!node) return;
+      mutateModel((model) => {
+        insertIntoModel(model, node, target);
+        return model;
+      }, true);
+      setSelectedId(node.id);
+    },
+    [mutateModel]
   );
 
   // True while the CMS covers the canvas: the page-editing shortcuts below
@@ -2243,6 +2231,7 @@ export default function App() {
                 onOpenComponent={(name, id) => openComponent(name, pathFor(id))}
                 onChangeLayout={changeLayout}
                 onDropComponent={addComponent}
+                onDropElement={dropElement}
                 onMoveNode={moveNode}
                 onRemoveNode={removeNode}
                 onCopyNode={copyNode}
@@ -2251,6 +2240,12 @@ export default function App() {
                 onRequestInsert={openInsertAt}
                 hasClipboard={() => !!nodeClipboardRef.current}
                 onRawChange={setRawSource}
+              />
+            )}
+            {leftTab === 'add' && (
+              <AddPanel
+                onInsert={insertItem}
+                onDragBegin={() => setLeftTab('navigator')}
               />
             )}
             {leftTab === 'components' && (
@@ -2474,6 +2469,41 @@ export default function App() {
       {toast && <Toast toast={toast} />}
     </div>
   );
+}
+
+// A palette/Add-panel item → the model node it inserts. `text` overrides the
+// tag's default placeholder and `style` seeds an inline style (the Add panel's
+// layout tiles use it so a new flex row actually looks like one); neither is
+// set by the ⌘E palette, which inserts bare tags.
+function buildInsertNode(item) {
+  const id = newId();
+  if (item.type === 'element') {
+    const placeholder = item.text ?? DEFAULT_TEXT[item.tag];
+    return {
+      id,
+      kind: 'element',
+      name: item.tag,
+      props: item.style ? { style: { type: 'string', value: item.style } } : {},
+      children: VOID_ELEMENTS.has(item.tag)
+        ? null
+        : placeholder
+          ? [{ id: newId(), kind: 'text', value: placeholder }]
+          : [],
+    };
+  }
+  if (item.type === 'map') {
+    // No source until one is picked in the props panel. An empty literal
+    // renders nothing; a placeholder name would throw "x is not defined"
+    // and take the preview down the moment the loop lands on the page.
+    return { id, kind: 'map', head: '[].map((item) => (', children: [] };
+  }
+  if (item.type === 'comment') return { id, kind: 'comment', value: ' Comment ' };
+  if (item.type === 'text') return { id, kind: 'text', value: 'Text' };
+  if (item.type === 'expr') return { id, kind: 'expr', value: '{/* code */}' };
+  if (item.type === 'style' || item.type === 'script') {
+    return { id, kind: 'raw', name: item.type, props: {}, inner: '' };
+  }
+  return null;
 }
 
 function insertIntoModel(model, node, target) {

@@ -87,6 +87,75 @@ export const PlusIcon = (p) => (
   </I>
 );
 
+// Add-panel tiles that share a tag but not a purpose: every one of these is a
+// <div>, so elementIcon() would draw the same square six times. The glyph is
+// the only thing telling V Flex from H Flex from Grid, so they get their own.
+export const ElementContainerIcon = (p) => (
+  <I {...p}>
+    <rect x="1.75" y="3.25" width="12.5" height="9.5" rx="1.2" />
+    <path d="M4.75 3.25v9.5M11.25 3.25v9.5" strokeDasharray="1.6 1.4" />
+  </I>
+);
+
+export const ElementVFlexIcon = (p) => (
+  <I {...p}>
+    <rect x="2.25" y="2.25" width="11.5" height="11.5" rx="1.5" />
+    <rect x="4.5" y="4.5" width="7" height="2.2" rx="0.6" />
+    <rect x="4.5" y="9.3" width="7" height="2.2" rx="0.6" />
+  </I>
+);
+
+export const ElementHFlexIcon = (p) => (
+  <I {...p}>
+    <rect x="2.25" y="2.25" width="11.5" height="11.5" rx="1.5" />
+    <rect x="4.5" y="4.5" width="2.2" height="7" rx="0.6" />
+    <rect x="9.3" y="4.5" width="2.2" height="7" rx="0.6" />
+  </I>
+);
+
+export const ElementGridIcon = (p) => (
+  <I {...p}>
+    <rect x="2.25" y="2.25" width="11.5" height="11.5" rx="1.5" />
+    <path d="M8 2.25v11.5M2.25 8h11.5" />
+  </I>
+);
+
+export const ElementTextBlockIcon = (p) => (
+  <I {...p}>
+    <path d="M2.75 4h10.5M2.75 7.3h10.5M2.75 10.6h6.5" />
+  </I>
+);
+
+export const ElementQuoteIcon = (p) => (
+  <I {...p}>
+    <path d="M2.5 3.5v9" strokeWidth="1.8" />
+    <path d="M6 5.5h7.5M6 8h7.5M6 10.5h4.5" />
+  </I>
+);
+
+export const ElementEmbedIcon = (p) => (
+  <I {...p}>
+    <rect x="1.75" y="2.75" width="12.5" height="10.5" rx="1.5" />
+    <path d="m6.4 6.6-1.7 1.7 1.7 1.7M9.6 6.6l1.7 1.7-1.7 1.7" />
+  </I>
+);
+
+export const ElementLabelIcon = (p) => (
+  <I {...p}>
+    <path d="M2.75 4.5h6.5M2.75 7.5h4" />
+    <rect x="2.25" y="9.75" width="11.5" height="3.5" rx="1" />
+  </I>
+);
+
+// Rail icon for the Add panel — a boxed "+", so it reads as a panel button
+// next to the other rail glyphs rather than as an inline action.
+export const AddPanelIcon = (p) => (
+  <I {...p}>
+    <rect x="2.25" y="2.25" width="11.5" height="11.5" rx="2.5" />
+    <path d="M8 5.25v5.5M5.25 8h5.5" />
+  </I>
+);
+
 export const RefreshIcon = (p) => (
   <I {...p}>
     <path d="M13 8a5 5 0 1 1-1.47-3.54" />

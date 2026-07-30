@@ -39,6 +39,7 @@ export default function StructurePanel({
   onOpenComponent,
   onChangeLayout,
   onDropComponent,
+  onDropElement,
   onMoveNode,
   onRemoveNode,
   onCopyNode,
@@ -204,16 +205,27 @@ export default function StructurePanel({
   const clearDrop = () => setDropTarget(null);
 
   const isDndPayload = (e) =>
-    e.dataTransfer.types.includes('avb/component') || e.dataTransfer.types.includes('avb/node');
+    e.dataTransfer.types.includes('avb/component') ||
+    e.dataTransfer.types.includes('avb/element') ||
+    e.dataTransfer.types.includes('avb/node');
 
   const performDrop = (e, target) => {
     e.preventDefault();
     e.stopPropagation();
     clearDrop();
     const compName = e.dataTransfer.getData('avb/component');
+    const elementItem = e.dataTransfer.getData('avb/element');
     const nodeId = e.dataTransfer.getData('avb/node');
     if (compName) onDropComponent(compName, target);
-    else if (nodeId) onMoveNode(nodeId, target);
+    else if (elementItem && onDropElement) {
+      // Add-panel tiles travel as JSON — they carry a tag plus optional seed
+      // text/style, which a bare tag name couldn't.
+      try {
+        onDropElement(JSON.parse(elementItem), target);
+      } catch {
+        /* malformed payload — nothing to insert */
+      }
+    } else if (nodeId) onMoveNode(nodeId, target);
   };
 
   const isCollapsed = (node) =>
