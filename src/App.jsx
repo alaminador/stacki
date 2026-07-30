@@ -755,6 +755,23 @@ export default function App() {
     [scheduleSave, pushHistory]
   );
 
+  // Appends a <style> block holding `css` and returns its id. The style panel
+  // calls this on the first edit of a page that has no stylesheet and no
+  // <style> of its own — without it those edits have nowhere to go and the
+  // panel silently refuses them. Top level, so Astro hoists and scopes it.
+  const createStyleNode = useCallback(
+    (css) => {
+      if (!pageStateRef.current.pageState?.editable) return null;
+      const id = newId();
+      mutateModel((model) => {
+        model.nodes.push({ id, kind: 'raw', name: 'style', props: {}, inner: String(css ?? '') });
+        return model;
+      }, true);
+      return id;
+    },
+    [mutateModel]
+  );
+
   const setRawSource = useCallback(
     (source) => {
       pushHistory('raw-source');
@@ -2382,6 +2399,7 @@ export default function App() {
                 onWriteStyleNode={(nodeId, css, immediate) =>
                   setNodeText(nodeId, css, undefined, immediate)
                 }
+                onCreateStyleNode={createStyleNode}
                 onSelectNode={setSelectedId}
               />
             )}

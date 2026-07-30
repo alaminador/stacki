@@ -137,8 +137,10 @@ export type EmbedSource = {
   order: number
   element: AnyEl
   instance?: AnyEl
-  /** Where the CSS lives — the panel writes back through this. */
-  origin: { kind: 'file'; path: string } | { kind: 'node'; nodeId: string }
+  /** Where the CSS lives — the panel writes back through this. `pending` is a
+   *  <style> block that doesn't exist yet: it reads as empty and is created on
+   *  the first write (see writeEmbedDoc). */
+  origin: { kind: 'file'; path: string } | { kind: 'node'; nodeId: string } | { kind: 'pending' }
 }
 
 export type EmbedDoc = {
@@ -216,6 +218,24 @@ function styleSources(): EmbedSource[] {
     })
   })
 
+  // A project with no stylesheet, on a page with no <style> of its own, has
+  // nowhere to write a rule — and the panel's "nothing to write to" refusal is
+  // a status message that nothing renders, so every edit looks like a dead
+  // button. Offer a <style> block that doesn't exist yet: it reads as empty,
+  // and the first write creates it (writeEmbedDoc).
+  if (out.length === 0 && host.createStyleNode) {
+    out.push({
+      key: 'pending:style',
+      label: '<style>',
+      classNames: [],
+      fromComponent: false,
+      componentName: null,
+      order: order++,
+      element: 'pending:style',
+      origin: { kind: 'pending' },
+    })
+  }
+
   return out
 }
 
@@ -285,6 +305,7 @@ function docForSource(source: EmbedSource, code: string): EmbedDoc {
 }
 
 async function readSource(source: EmbedSource): Promise<string> {
+  if (source.origin.kind === 'pending') return ''
   if (source.origin.kind === 'file') {
     const res = await window.avb.readStyleFile(source.origin.path)
     return res?.css ?? ''
@@ -324,6 +345,16 @@ export async function writeEmbedDoc(
   try {
     if (doc.source.origin.kind === 'file') {
       await window.avb.writeStyleFile({ filePath: doc.source.origin.path, css: code })
+    } else if (doc.source.origin.kind === 'pending') {
+      // First rule on a page with nowhere to put one: create the <style> block
+      // now and re-point this source at the real node, so the next write is an
+      // ordinary node write rather than a second creation.
+      const create = getHost().createStyleNode
+      if (!create) return { ok: false, error: 'No page open to write into.' }
+      const nodeId = create(code)
+      if (!nodeId) return { ok: false, error: 'Could not add a <style> block to this page.' }
+      doc.source.origin = { kind: 'node', nodeId }
+      doc.source.element = nodeId
     } else {
       const write = getHost().writeStyleNode
       if (!write) return { ok: false, error: 'No page open to write into.' }
@@ -368,6 +399,9 @@ export function rebuildRules(docs: EmbedDoc[]): ParsedRule[] {
 export async function navigateToEmbed(
   source: EmbedSource,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (source.origin.kind === 'pending') {
+    return { ok: false, error: 'This <style> block is added with your first style edit.' }
+  }
   if (source.origin.kind !== 'node') {
     return { ok: false, error: `${source.label} is a stylesheet — open it from the Assets panel.` }
   }

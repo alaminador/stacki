@@ -27,6 +27,10 @@ export type HostState = {
   /** Write a <style> node's CSS back into the page model. `immediate` saves the page
    *  right away (a committed edit) instead of coalescing like a typing burst. */
   writeStyleNode: ((nodeId: string, css: string, immediate?: boolean) => void) | null
+  /** Append a <style> block holding `css` to the page and return its node id.
+   *  A page with no stylesheet and no <style> of its own has nowhere to put a
+   *  rule; this gives the first edit somewhere to land. */
+  createStyleNode: ((css: string) => string | null) | null
   /** Select a node in the app (used when navigating from a provenance chip). */
   selectNode: ((nodeId: string) => void) | null
 }
@@ -38,6 +42,7 @@ const state: HostState = {
   device: 'desktop',
   files: [],
   writeStyleNode: null,
+  createStyleNode: null,
   selectNode: null,
 }
 
