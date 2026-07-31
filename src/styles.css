@@ -2593,6 +2593,37 @@ body > .embed-editor_bg-modal-backdrop > .embed-editor_grid-modal {
   transform: none;
   border-radius: 0 0 4px 0;
 }
+
+/* Box model on the selected element. The browser-devtools palette, which
+   everyone already reads without a legend: orange margin, green padding.
+   Kept faint — these sit over the real page, and the point is to read the
+   spacing, not to repaint the design. */
+.box-band {
+  position: absolute;
+  pointer-events: none;
+}
+.box-band.m { background: rgba(246, 178, 107, 0.2); }
+.box-band.p { background: rgba(147, 196, 125, 0.2); }
+
+/* Dimensions readout, bottom-right of the selection. */
+.node-outline-size {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  transform: translateY(100%);
+  background: var(--accent);
+  color: white;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 3px 5px 4px;
+  border-radius: 0 0 4px 4px;
+  white-space: nowrap;
+}
+.node-outline-size.inside {
+  transform: none;
+  border-radius: 4px 0 0 0;
+}
 .node-outline.hover .node-outline-tag {
   background: transparent;
   color: var(--accent);

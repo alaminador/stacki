@@ -270,6 +270,33 @@ if (!process.isMainFrame) {
 
   const toRect = (a) => ({ x: a.left, y: a.top, w: a.right - a.left, h: a.bottom - a.top });
 
+  // Margin / border / padding for the box-model overlay, in the order CSS
+  // writes them (top, right, bottom, left). Only meaningful for a single
+  // element, so callers pass the node that owns the box; a union of several
+  // (a split paragraph, a chunk group) reports none and just draws the
+  // outline. All-zero comes back as null so the overlay draws nothing for
+  // the common case of an element with no spacing at all.
+  const boxMetrics = (el) => {
+    if (!el || el.nodeType !== 1) return null;
+    const cs = getComputedStyle(el);
+    const sides = (prefix, suffix) =>
+      ['Top', 'Right', 'Bottom', 'Left'].map((side) => parseFloat(cs[prefix + side + suffix]) || 0);
+    const m = sides('margin', '');
+    const b = sides('border', 'Width');
+    const pad = sides('padding', '');
+    const any = [...m, ...b, ...pad].some((v) => v !== 0);
+    return any ? { m, b, p: pad } : null;
+  };
+
+  // The element a path's box belongs to, for metrics: the first tagged
+  // element in the run (document order), skipping text nodes and templates.
+  const ownerElement = (run) => {
+    for (const n of run) {
+      if (n.nodeType === 1 && n.tagName !== 'TEMPLATE' && n.isConnected) return n;
+    }
+    return null;
+  };
+
   // One rect per marker-pair occurrence (a loop child renders once per
   // item — each instance gets its own box), unioned across the nodes
   // inside each occurrence.
@@ -289,8 +316,14 @@ if (!process.isMainFrame) {
     // stay separate boxes, so they keep the per-run rects above.
     if (runs.length === 1) {
       let acc = runs[0].reduce(addNode, null);
-      for (const el of document.querySelectorAll(`[${PATH_ATTR}="${p}"]`)) acc = addNode(acc, el);
-      return acc ? [toRect(acc)] : null;
+      const tagged = document.querySelectorAll(`[${PATH_ATTR}="${p}"]`);
+      for (const el of tagged) acc = addNode(acc, el);
+      if (!acc) return null;
+      // Metrics only when the box really is one element's: a union of several
+      // pieces has no single margin/padding to show.
+      const owner = ownerElement(runs[0]);
+      const single = tagged.length <= 1 && runs[0].filter((n) => n.nodeType === 1).length <= 1;
+      return [{ ...toRect(acc), box: single ? boxMetrics(owner) : null }];
     }
     return out.length ? out : null;
   };

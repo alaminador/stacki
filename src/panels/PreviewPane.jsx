@@ -37,6 +37,43 @@ function outlineIcon(info) {
   }
 }
 
+// Box-model bands for the selected element: margin outside the border box,
+// padding inside it. Each side is its own strip rather than one inset ring,
+// so asymmetric spacing reads correctly (padding-left: 40 with the rest 0
+// draws one bar, not a lopsided frame). The iframe sends no metrics when
+// every side is zero, so an element with no spacing draws nothing.
+function BoxModel({ rect }) {
+  const box = rect.box;
+  if (!box) return null;
+  const [mt, mr, mb, ml] = box.m;
+  const [bt, br, bb, bl] = box.b;
+  const [pt, pr, pb, pl] = box.p;
+  // Padding sits inside the border, so its strips start after the border.
+  const bands = [
+    ['m', -ml - 0, -mt, ml, rect.h + mt + mb, ml],
+    ['m', rect.w, -mt, mr, rect.h + mt + mb, mr],
+    ['m', 0, -mt, rect.w, mt, mt],
+    ['m', 0, rect.h, rect.w, mb, mb],
+    ['p', bl, bt, pl, rect.h - bt - bb, pl],
+    ['p', rect.w - br - pr, bt, pr, rect.h - bt - bb, pr],
+    ['p', bl + pl, bt, rect.w - bl - br - pl - pr, pt, pt],
+    ['p', bl + pl, rect.h - bb - pb, rect.w - bl - br - pl - pr, pb, pb],
+  ];
+  return (
+    <>
+      {bands.map(([kind, x, y, w, h, size], i) =>
+        size > 0 && w > 0 && h > 0 ? (
+          <div
+            key={i}
+            className={`box-band ${kind}`}
+            style={{ left: x, top: y, width: w, height: h }}
+          />
+        ) : null
+      )}
+    </>
+  );
+}
+
 // Desktop fills the canvas (width: null = fill).
 const DEVICES = [
   { key: 'desktop', Icon: DesktopIcon, title: 'Desktop — 1', width: null },
@@ -386,10 +423,24 @@ export default function PreviewPane({
                       className={`node-outline ${o.type} ${info.kind}${info.bound ? ' bound' : ''}`}
                       style={{ left: r.x, top: r.y, width: r.w, height: r.h }}
                     >
+                      {/* Spacing only for the selection — drawing it under the
+                          hover box too would flicker bands across the page as
+                          the pointer travels. */}
+                      {o.type === 'sel' && <BoxModel rect={r} />}
                       <span className={`node-outline-tag ${r.y < 20 ? 'inside' : ''}`}>
                         {outlineIcon(info)}
                         {info.label}
                       </span>
+                      {/* Inside the box when there's room, below it otherwise —
+                          a short element would otherwise wear a readout wider
+                          than itself. */}
+                      {o.type === 'sel' && (
+                        <span
+                          className={`node-outline-size ${r.w >= 68 && r.h >= 26 ? 'inside' : ''}`}
+                        >
+                          {Math.round(r.w)} × {Math.round(r.h)}
+                        </span>
+                      )}
                     </div>
                   ));
                 })}
