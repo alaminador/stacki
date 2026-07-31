@@ -473,6 +473,36 @@ export function nativeStylingAvailable(): boolean {
   return false
 }
 
+// A selector that is exactly one plain class (".hero", not ".hero:hover",
+// "div.hero" or ".a .b") → its class name, else null. Only this shape can be
+// safely read as "the user wants this class on the element".
+const SINGLE_CLASS = /^\.(-?[_a-zA-Z][\w-]*)$/
+
+export function classNameFromSelector(selector: string): string | null {
+  const m = SINGLE_CLASS.exec(selector.trim())
+  return m ? m[1] : null
+}
+
+// Typing a new class in the selector well means "style this element with it",
+// which only works if the element actually carries the class. Returns whether
+// it added one (false = not a plain class, already present, or no host).
+export function applyClassToSelected(selector: string): boolean {
+  const host = getHost()
+  const name = classNameFromSelector(selector)
+  if (!name || !host.addClass || !host.selectedId) return false
+  const node = nodeById(host.selectedId)
+  // Components render markup we can't see, but they still take a class
+  // attribute; only non-element kinds (text, comment) have nowhere to put it.
+  if (!node || (node.kind !== 'element' && node.kind !== 'component')) return false
+  // `class={expr}` is computed at render time — appending a literal to it
+  // would be dropped, so report it as not applied rather than silently no-op.
+  const current = node.props?.class
+  if (current && current.type !== 'string') return false
+  if (classTokens(node).includes(name)) return false
+  host.addClass(name)
+  return true
+}
+
 const EMPTY_NATIVE: NativeModel = { styles: [], read: false }
 
 export type NativeWriteTarget = { namePath: string[]; index: number | null }

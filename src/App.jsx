@@ -773,6 +773,31 @@ export default function App() {
     [mutateModel]
   );
 
+  // Appends a class to a node's class attribute, creating it if absent. The
+  // style panel calls this when a new class is typed into its selector well,
+  // so the rule it goes on to write actually matches the element.
+  const addClassToNode = useCallback(
+    (nodeId, className) => {
+      const name = String(className || '').trim();
+      if (!nodeId || !name) return;
+      mutateModel((model) => {
+        const node = findNodeById(model.nodes, nodeId);
+        if (!node) return model;
+        if (!node.props) node.props = {};
+        const current = node.props.class;
+        // An expression class (`class={x}`) isn't ours to append to — the
+        // value is computed at render time, so a literal would be dropped.
+        if (current && current.type !== 'string') return model;
+        const tokens = String(current?.value || '').trim().split(/\s+/).filter(Boolean);
+        if (tokens.includes(name)) return model;
+        tokens.push(name);
+        node.props.class = { type: 'string', value: tokens.join(' ') };
+        return model;
+      }, true);
+    },
+    [mutateModel]
+  );
+
   const setRawSource = useCallback(
     (source) => {
       pushHistory('raw-source');
@@ -2395,6 +2420,7 @@ export default function App() {
                   setNodeText(nodeId, css, undefined, immediate)
                 }
                 onCreateStyleNode={createStyleNode}
+                onAddClass={(name) => addClassToNode(selectedIdRef.current, name)}
                 onSelectNode={setSelectedId}
               />
             )}

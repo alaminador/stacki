@@ -75,6 +75,7 @@ import {
   serializeElementId,
   liveSetNativeProperty,
   nativeStylingAvailable,
+  applyClassToSelected,
   webflowApi,
   webflowClassToCss,
   writeEmbedDoc,
@@ -2125,6 +2126,10 @@ export default function EmbedEditor() {
   // fuller rootSnapshot arrives.
   const [quickSnapshot, setQuickSnapshot] = useState<ElementSnapshot | null>(null)
   const [status, setStatus] = useState('Select an element to inspect its embed styles.')
+  // Refusals that end an edit with nothing written. `status` records 39 of
+  // these and is rendered nowhere, so a declined click was indistinguishable
+  // from a broken button; these are the ones the user has to know about.
+  const [blockedNote, setBlockedNote] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   // Last save failure (surfaced by the header save indicator, not as body text).
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -3091,6 +3096,11 @@ export default function EmbedEditor() {
         return
       }
     }
+    // A plain new class also goes onto the element: styling `.hero` is
+    // pointless while nothing carries the class, and Webflow's own selector
+    // field applies it as you type. Anything more complex (a state, a
+    // descendant, a compound) is a target to write under, not a class to add.
+    applyClassToSelected(trimmed)
     selectActiveSelector(trimmed)
   }, [selectActiveSelector])
   // Add a custom query (@media/@container/@supports) to the current selector from the
@@ -3563,7 +3573,10 @@ export default function EmbedEditor() {
     const region = anchor && doc && anchor.embedKey === doc.source.key
       ? doc.regions[anchor.regionIndex]
       : doc?.regions[0]
-    if (!doc || !region) { setStatus('No embed here to write to — add an HTML embed first.'); return }
+    if (!doc || !region) {
+      const msg = 'Nowhere to write CSS — this page has no stylesheet or <style> block.'
+      setStatus(msg); setBlockedNote(msg); return
+    }
     const fullSelector = selectorOverride ?? activeSelector
     void (async () => {
       setBusyBoth(true)
@@ -3587,7 +3600,7 @@ export default function EmbedEditor() {
           ? createRuleInAtRule(block.node, fullSelector, prop, value, important)
           : createRuleInQuery(region, embedCtx, fullSelector, prop, value, important)
       }
-      if (!ok) { setStatus('Nothing to save.'); return }
+      if (!ok) { setStatus('Nothing to save.'); setBlockedNote(`Couldn’t write ${fullSelector} — the rule couldn’t be created.`); return }
       const res = await writeEmbedDoc(doc)
       await refreshDerived()
       if (!res.ok) {
@@ -3630,7 +3643,7 @@ export default function EmbedEditor() {
       // true — that would wrongly disable every add button (transforms, shadows, …).
       try {
         const ok = path ? ensureNestPath(region, path) : ctxKey ? ensureQueryBlock(region, ctxKey) : false
-        if (!ok) { setStatus('Couldn’t add the query.'); return }
+        if (!ok) { setStatus('Couldn’t add the query.'); setBlockedNote('Couldn’t add the query.'); return }
         await refreshDerived()
         const res = await writeEmbedDoc(doc)
         if (!res.ok) {
@@ -3775,6 +3788,7 @@ export default function EmbedEditor() {
     return null
   }
   const setProp = (prop: string, value: string, important: boolean) => {
+    setBlockedNote(null) // this attempt supersedes whatever the last one refused
     // Webflow's native API rejects hsl()/hsla() — normalize every write to rgb/rgba.
     value = hslaToRgba(value)
     // A commit is the new baseline: whatever a live write overwrote on the way here is
@@ -3784,7 +3798,8 @@ export default function EmbedEditor() {
       const route = autoSelectForEdit()
       if (route && 'native' in route) { nativeSetOrFallback(route.native, prop, value, important); return }
       if (route && 'embedSelector' in route) { createSelectedRule(prop, value, important, route.embedSelector); return }
-      setStatus('Nothing to style here — add a class in Webflow first.')
+      const msg = 'Nothing to style here — give this element a class in the Settings panel first.'
+      setStatus(msg); setBlockedNote(msg)
       return
     }
     if (propLayer(prop) === 'native') {
@@ -3928,6 +3943,13 @@ export default function EmbedEditor() {
       {pendingKeys.size ? (
         <p className="embed-editor_pending-note">
           {pendingKeys.size} unsaved page-embed change{pendingKeys.size === 1 ? '' : 's'} — will save when you exit the component.
+        </p>
+      ) : null}
+
+      {blockedNote ? (
+        <p className="embed-editor_fallback-note" role="status">
+          {blockedNote}
+          <button type="button" className="embed-editor_fallback-dismiss" aria-label="Dismiss" onClick={() => setBlockedNote(null)}>✕</button>
         </p>
       ) : null}
 

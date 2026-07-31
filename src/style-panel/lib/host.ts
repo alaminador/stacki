@@ -33,6 +33,10 @@ export type HostState = {
   createStyleNode: ((css: string) => string | null) | null
   /** Select a node in the app (used when navigating from a provenance chip). */
   selectNode: ((nodeId: string) => void) | null
+  /** Add a class to the selected element. Typing a new class in the selector
+   *  well has to put it on the element too, or the rule it writes matches
+   *  nothing — Webflow's Designer API did this half; here the app does. */
+  addClass: ((className: string) => void) | null
 }
 
 const state: HostState = {
@@ -44,6 +48,7 @@ const state: HostState = {
   writeStyleNode: null,
   createStyleNode: null,
   selectNode: null,
+  addClass: null,
 }
 
 const listeners = new Set<() => void>()
