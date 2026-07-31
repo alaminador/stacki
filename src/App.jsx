@@ -2073,6 +2073,19 @@ export default function App() {
     crumbs.push(...chain.map((n) => ({ id: n.id, label: crumbLabel(n) })));
   }
 
+  // Double-clicking text on the canvas edits it in place. Only when the
+  // element's content is exactly one text node (or nothing yet): the caret
+  // edits the rendered string, so an element mixing text with inline markup
+  // — "Hello <strong>world</strong>" — would come back as flat text and lose
+  // the markup. Those keep the Content field, which understands inline nodes.
+  const [editTextReq, setEditTextReq] = useState(null);
+  const inlineEditable = (node) => {
+    if (!node || node.kind !== 'element') return false;
+    if (VOID_ELEMENTS.has(String(node.name).toLowerCase())) return false;
+    const kids = node.children || [];
+    return kids.length === 0 || (kids.length === 1 && kids[0].kind === 'text');
+  };
+
   // Canvas outlines: nodes are addressed by their index path in the tree
   // (matching the marker paths the dev server's plugin injects).
   const pathFor = (id) => {
@@ -2378,9 +2391,17 @@ export default function App() {
               setRevealTick((t) => t + 1);
             }}
             onOpenPath={(p) => {
-              // Double-clicking a component on the canvas drills into it.
+              // Double-clicking a component on the canvas drills into it;
+              // double-clicking text edits it where it sits.
               const n = model && nodeAtPath(model.nodes, p.split('.').map(Number));
-              if (n?.kind === 'component') openComponent(n.name, p);
+              if (n?.kind === 'component' && !n.dynamicTag) openComponent(n.name, p);
+              else if (inlineEditable(n)) setEditTextReq({ path: p, at: Date.now() });
+            }}
+            editTextReq={editTextReq}
+            onTextEdited={(p, text) => {
+              const n = model && nodeAtPath(model.nodes, p.split('.').map(Number));
+              if (n) setNodeContent(n.id, text);
+              setEditTextReq(null);
             }}
           />
 

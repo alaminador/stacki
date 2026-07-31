@@ -102,6 +102,8 @@ export default function PreviewPane({
   onOpenPath,
   resolveCanvasDrop,
   onCanvasDrop,
+  editTextReq,
+  onTextEdited,
   focusPath,
   device,
   onDevice,
@@ -194,6 +196,8 @@ export default function PreviewPane({
         onOpenPath(d.path);
       } else if (d?.type === 'avb:drag-over') {
         setHint(d.target && resolveCanvasDrop ? resolveCanvasDrop(d.target) : null);
+      } else if (d?.type === 'avb:text-edited' && onTextEdited) {
+        onTextEdited(d.path, d.text);
       } else if (d?.type === 'avb:drag-drop') {
         const hint = dropHintRef.current;
         setHint(null);
@@ -202,7 +206,7 @@ export default function PreviewPane({
     };
     window.addEventListener('message', onMsg);
     return () => window.removeEventListener('message', onMsg);
-  }, [onSelectPath, onOpenPath, resolveCanvasDrop, onCanvasDrop, setHint]);
+  }, [onSelectPath, onOpenPath, resolveCanvasDrop, onCanvasDrop, onTextEdited, setHint]);
 
   // A drag that ends outside the frame (cancelled, or dropped on a panel)
   // never sends avb:drag-drop, so the line would otherwise linger.
@@ -215,6 +219,18 @@ export default function PreviewPane({
       window.removeEventListener('drop', clear);
     };
   }, [setHint]);
+
+  // The app asks for an inline edit by bumping this; the frame owns the
+  // caret, so it just needs telling which element and which instance.
+  React.useEffect(() => {
+    if (!editTextReq) return;
+    const w = iframeRef.current?.contentWindow;
+    if (!w) return;
+    w.postMessage(
+      { type: 'avb:edit-text', path: editTextReq.path, occurrence: editTextReq.occurrence || 0 },
+      '*'
+    );
+  }, [editTextReq]);
 
   const hoverPath = navHoverPath || canvasHover;
   // A navigator hover means "the node", so every instance lights up; a canvas

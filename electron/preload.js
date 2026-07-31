@@ -446,6 +446,85 @@ if (!process.isMainFrame) {
     window.parent.postMessage({ type: 'avb:drag-over', target: target || null }, '*');
   };
 
+  // Editing a text node in place. The app decides what's editable — it knows
+  // whether the node is a lone text child (safe to replace wholesale) or has
+  // inline markup mixed in (not) — and asks for the element by path.
+  let editingEl = null;
+  let editingPath = null;
+  let editingOriginal = '';
+
+  const isEditing = (target) =>
+    !!editingEl && (target === editingEl || (editingEl.contains && editingEl.contains(target)));
+
+  const elementForPath = (path, occurrence) => {
+    const runs = regions.get(path);
+    const run = runs && (runs[occurrence || 0] || runs[0]);
+    if (run) {
+      for (const n of run) {
+        if (n.nodeType === 1 && n.tagName !== 'TEMPLATE' && n.isConnected) return n;
+      }
+    }
+    return document.querySelector(`[${PATH_ATTR}="${path}"]`);
+  };
+
+  const endEdit = (commit) => {
+    const el = editingEl;
+    const path = editingPath;
+    if (!el) return;
+    editingEl = null;
+    editingPath = null;
+    el.removeAttribute('contenteditable');
+    el.style.cursor = '';
+    const text = el.textContent;
+    if (!commit) {
+      el.textContent = editingOriginal;
+    } else if (text !== editingOriginal) {
+      window.parent.postMessage({ type: 'avb:text-edited', path, text }, '*');
+    }
+  };
+
+  const beginEdit = (path, occurrence) => {
+    if (editingEl) endEdit(true);
+    const el = elementForPath(path, occurrence);
+    if (!el) return;
+    editingEl = el;
+    editingPath = path;
+    editingOriginal = el.textContent;
+    el.setAttribute('contenteditable', 'plaintext-only');
+    // The design stylesheet forces `cursor: default` everywhere; an editable
+    // box needs a caret to look like one.
+    el.style.cursor = 'text';
+    el.focus();
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  };
+
+  document.addEventListener(
+    'keydown',
+    (e) => {
+      if (!editingEl) return;
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        endEdit(false);
+      } else if (e.key === 'Enter' && !e.shiftKey) {
+        // Enter commits rather than inserting a newline: these are headings
+        // and labels, and a stray <br> would have to round-trip through the
+        // model as markup.
+        e.preventDefault();
+        e.stopPropagation();
+        endEdit(true);
+      }
+    },
+    true
+  );
+  document.addEventListener('focusout', (e) => {
+    if (editingEl && e.target === editingEl) endEdit(true);
+  });
+
   const startCanvasDrop = () => {
     window.addEventListener('dragover', (e) => {
       if (!isAppDrag(e)) return;
@@ -498,7 +577,7 @@ if (!process.isMainFrame) {
     document.addEventListener(
       'dblclick',
       (e) => {
-        if (!designMode) return;
+        if (!designMode || isEditing(e.target)) return;
         e.preventDefault();
         e.stopPropagation();
         const p = pathContaining(e.target);
@@ -514,7 +593,9 @@ if (!process.isMainFrame) {
     document.addEventListener(
       'click',
       (e) => {
-        if (!designMode) return;
+        // Clicks inside the box being edited place the caret; swallowing them
+        // would make it impossible to click into the middle of a word.
+        if (!designMode || isEditing(e.target)) return;
         e.preventDefault();
         e.stopPropagation();
         // A click that hits no marked node still reports (path null) — the
@@ -539,6 +620,9 @@ if (!process.isMainFrame) {
       designMode = true;
       trackedPaths = d.paths;
       sendRects();
+    }
+    if (d?.type === 'avb:edit-text' && typeof d.path === 'string') {
+      beginEdit(d.path, d.occurrence || 0);
     }
     if (d?.type === 'avb:scroll-to' && typeof d.path === 'string') {
       scrollPathIntoView(d.path);
