@@ -4,6 +4,8 @@ import PagesPanel from './panels/PagesPanel.jsx';
 import PalettePanel from './panels/PalettePanel.jsx';
 import StructurePanel from './panels/StructurePanel.jsx';
 import AddPanel from './panels/AddPanel.jsx';
+import { resolveDrop } from './canvasDrop.js';
+import { getDrag, clearDrag } from './dragState.js';
 import PropsPanel from './panels/PropsPanel.jsx';
 import StylePanel from './panels/StylePanel.jsx';
 import PreviewPane from './panels/PreviewPane.jsx';
@@ -2358,6 +2360,22 @@ export default function App() {
                 setLeftTab('navigator');
                 setRevealTick((t) => t + 1);
               }
+            }}
+            resolveCanvasDrop={(hit) =>
+              model ? resolveDrop(hit, getDrag(), (trail) => nodeAtPath(model.nodes, trail)) : null
+            }
+            onCanvasDrop={(target) => {
+              // The panels record what they're dragging in dragState, because
+              // dragover can't read a dataTransfer payload — the canvas needs
+              // it on every pointer move to decide if the drop is legal.
+              const drag = getDrag();
+              clearDrag();
+              if (!drag) return;
+              if (drag.kind === 'component') addComponent(drag.name, target);
+              else if (drag.item) dropElement(drag.item, target);
+              else if (drag.id) moveNode(drag.id, target);
+              setLeftTab('navigator');
+              setRevealTick((t) => t + 1);
             }}
             onOpenPath={(p) => {
               // Double-clicking a component on the canvas drills into it.

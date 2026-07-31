@@ -100,6 +100,8 @@ export default function PreviewPane({
   overlayInfo,
   onSelectPath,
   onOpenPath,
+  resolveCanvasDrop,
+  onCanvasDrop,
   focusPath,
   device,
   onDevice,
@@ -137,6 +139,16 @@ export default function PreviewPane({
   const iframeRef = React.useRef(null);
   const [rects, setRects] = React.useState({});
   const [canvasHover, setCanvasHover] = React.useState(null);
+  // Where a drag from the Add/Components panel would land, as the iframe
+  // reports what's under the pointer. Held in a ref as well: the drop
+  // arrives in the same gesture and must act on the last hover, not on
+  // whatever a re-render happened to commit.
+  const [dropHint, setDropHint] = React.useState(null);
+  const dropHintRef = React.useRef(null);
+  const setHint = React.useCallback((h) => {
+    dropHintRef.current = h;
+    setDropHint(h);
+  }, []);
 
   // The path of the last selection made by clicking the page itself, so the
   // scroll-into-view below can skip it.
@@ -180,11 +192,29 @@ export default function PreviewPane({
         onSelectPath(d.path || null);
       } else if (d?.type === 'avb:open-node' && d.path && onOpenPath) {
         onOpenPath(d.path);
+      } else if (d?.type === 'avb:drag-over') {
+        setHint(d.target && resolveCanvasDrop ? resolveCanvasDrop(d.target) : null);
+      } else if (d?.type === 'avb:drag-drop') {
+        const hint = dropHintRef.current;
+        setHint(null);
+        if (hint && onCanvasDrop) onCanvasDrop(hint.target);
       }
     };
     window.addEventListener('message', onMsg);
     return () => window.removeEventListener('message', onMsg);
-  }, [onSelectPath, onOpenPath]);
+  }, [onSelectPath, onOpenPath, resolveCanvasDrop, onCanvasDrop, setHint]);
+
+  // A drag that ends outside the frame (cancelled, or dropped on a panel)
+  // never sends avb:drag-drop, so the line would otherwise linger.
+  React.useEffect(() => {
+    const clear = () => setHint(null);
+    window.addEventListener('dragend', clear);
+    window.addEventListener('drop', clear);
+    return () => {
+      window.removeEventListener('dragend', clear);
+      window.removeEventListener('drop', clear);
+    };
+  }, [setHint]);
 
   const hoverPath = navHoverPath || canvasHover;
   // A navigator hover means "the node", so every instance lights up; a canvas
@@ -444,6 +474,32 @@ export default function PreviewPane({
                     </div>
                   ));
                 })}
+              {/* Where a panel drag would land. Same overlay layer as the
+                  outlines, so it shares their coordinate space. */}
+              {dropHint &&
+                (dropHint.position === 'inside' ? (
+                  <div
+                    className="drop-into"
+                    style={{
+                      left: dropHint.rect.x,
+                      top: dropHint.rect.y,
+                      width: dropHint.rect.w,
+                      height: dropHint.rect.h,
+                    }}
+                  />
+                ) : (
+                  <div
+                    className="drop-line"
+                    style={{
+                      left: dropHint.rect.x,
+                      top:
+                        dropHint.position === 'before'
+                          ? dropHint.rect.y
+                          : dropHint.rect.y + dropHint.rect.h,
+                      width: dropHint.rect.w,
+                    }}
+                  />
+                ))}
             </div>
             <div className="rz-handle rz-w" onPointerDown={startResize('w')} />
             <div className="rz-handle rz-e" onPointerDown={startResize('e')} />

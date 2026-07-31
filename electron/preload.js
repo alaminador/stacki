@@ -409,8 +409,67 @@ if (!process.isMainFrame) {
 
   const pathContaining = (target) => nodeAt(target).path;
 
+  // Dragging something out of the app's panels over the page. This side only
+  // reports geometry — what's under the pointer and its box; the app decides
+  // whether the drop is legal and whether it lands before/after/inside,
+  // because it owns the model and the markup rules.
+  const APP_DRAG_TYPES = ['avb/element', 'avb/component', 'avb/node'];
+  const isAppDrag = (e) => {
+    // Only design frames accept drops — interactive preview is for clicking
+    // through the real site, where a panel drag has no meaning.
+    if (!designMode) return false;
+    // dragover can read type names but not payloads, which is all we need to
+    // tell our drags from ones the previewed page started itself.
+    const types = e.dataTransfer ? Array.from(e.dataTransfer.types) : [];
+    return APP_DRAG_TYPES.some((t) => types.includes(t));
+  };
+
+  const dragTargetAt = (x, y) => {
+    const el = document.elementFromPoint(x, y);
+    if (!el) return null;
+    const { path, occurrence } = nodeAt(el);
+    if (!path) return null;
+    // The box of the element actually under the pointer, not the union for
+    // the whole path: the insertion line has to sit against the thing being
+    // pointed at, and a loop's union spans every item.
+    const holder = (el.closest && el.closest(`[${PATH_ATTR}]`)) || el;
+    const b = holder.getBoundingClientRect();
+    return {
+      path,
+      occurrence,
+      rect: { x: b.left, y: b.top, w: b.width, h: b.height },
+      pointer: { x, y },
+    };
+  };
+
+  const postDragTarget = (target) => {
+    window.parent.postMessage({ type: 'avb:drag-over', target: target || null }, '*');
+  };
+
+  const startCanvasDrop = () => {
+    window.addEventListener('dragover', (e) => {
+      if (!isAppDrag(e)) return;
+      // Without preventDefault the frame is not a drop target and never sees
+      // the drop event at all.
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+      postDragTarget(dragTargetAt(e.clientX, e.clientY));
+    });
+    // relatedTarget null = the pointer left the frame, rather than moving
+    // between elements inside it (which fires dragleave constantly).
+    window.addEventListener('dragleave', (e) => {
+      if (isAppDrag(e) && !e.relatedTarget) postDragTarget(null);
+    });
+    window.addEventListener('drop', (e) => {
+      if (!isAppDrag(e)) return;
+      e.preventDefault();
+      window.parent.postMessage({ type: 'avb:drag-drop' }, '*');
+    });
+  };
+
   const startOutlines = () => {
     collectRegions();
+    startCanvasDrop();
     if (!regions.size) return;
     window.addEventListener('scroll', queueRects, true);
     window.addEventListener('resize', queueRects);

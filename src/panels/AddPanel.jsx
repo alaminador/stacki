@@ -155,7 +155,9 @@ export default function AddPanel({ onInsert, onDragBegin }) {
                         e.dataTransfer.effectAllowed = 'copy';
                         // Recorded so the navigator can refuse a drop that
                         // would be invalid markup (a <div> inside a <p>).
-                        setDrag({ kind: 'element', nodeKind: 'element', tag: tile.tag });
+                        // `item` rides along for canvas drops, which build the
+                        // node from dragState rather than the dataTransfer.
+                        setDrag({ kind: 'element', nodeKind: 'element', tag: tile.tag, item: itemFor(tile) });
                         // Deferred: let the browser capture the drag before
                         // this row unmounts under the panel switch.
                         if (onDragBegin) setTimeout(onDragBegin, 0);
